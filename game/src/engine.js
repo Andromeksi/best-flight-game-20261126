@@ -57,6 +57,12 @@ function engineResetGame() {
   G.vspeed = 0;
   G.time = 0;
   fuelWarned = false;
+  /* The click on LAUNCH leaves the mouse wherever the button sits; that
+     must not count as a steering command on the takeoff roll, or every
+     launch starts with an unintended nose-down dive. */
+  steerX = 0;
+  steerY = 0;
+  G.pullUp = false;
   var i;
   for (i = 0; i < world.rings.length; i++) {
     world.rings[i].passed = false;
@@ -404,14 +410,35 @@ function updateFlight(dt) {
 
   /* Pitch from the mouse; the nose auto-levels when the mouse is centred.
      Takeoff assist: once past liftoff speed the nose rises on its own
-     until the plane is 500 ft up, then pitch returns to the mouse. */
+     until the plane is 800 ft up, then pitch returns to the mouse. */
   var pitchTarget = Math.max(-0.4, Math.min(0.5, -steerY * 0.5));
   /* Takeoff assist: once past liftoff speed the nose rises on its own
-     until the plane is 500 ft up (y >= 50), then pitch returns to the
+     until the plane is 800 ft up (y >= 80), then pitch returns to the
      mouse. Latched by climbDone so a later low landing approach never
-     re-triggers the climb. */
-  if (G.y >= 50) G.climbDone = true;
+     re-triggers the climb. Climbing to 800 ft clears the runway
+     island's slopes before the first turn, instead of handing the
+     plane over at 500 ft while it is still crossing them. */
+  if (G.y >= 80) G.climbDone = true;
   if (!G.climbDone && G.speed > 65) pitchTarget = 0.5;
+  /* Takeoff-phase terrain clearance: in the first 10 seconds after
+     launch, a descending plane within 450 ft of the terrain below is
+     pulled up instead of being allowed to fly into a hillside or the
+     sea. It latches on until the plane is 650 ft clear again — without
+     the latch it chatters on and off as the vertical speed crosses
+     zero and the plane keeps sinking into rising terrain. The runway
+     strip is exempt so a landing approach still works, and after 10 s
+     the pilot owns the plane outright. The 450 ft trigger leaves room
+     for the nose to swing up while the ground is still rising under
+     the plane on the steep island flanks. */
+  var groundNow = world.groundAt(G.x, G.z);
+  var overStrip = G.x > -130 && G.x < 130 && Math.abs(G.z) < 40;
+  var clearanceNow = G.y - groundNow;
+  if (G.pullUp) {
+    if (clearanceNow > 65 || overStrip || G.time >= 10) G.pullUp = false;
+  } else if (G.time < 10 && !overStrip && G.vspeed < 0 && clearanceNow < 45) {
+    G.pullUp = true;
+  }
+  if (G.pullUp) pitchTarget = Math.max(pitchTarget, 0.4);
   G.pitch += (pitchTarget - G.pitch) * Math.min(1, dt * 3);
   G.vspeed = Math.sin(G.pitch) * G.speed;
   G.y += G.vspeed * dt;

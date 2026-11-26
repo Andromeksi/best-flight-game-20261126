@@ -21,9 +21,13 @@ function archipelagoSmoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
-/* Seven islands: x, z, radius, peak height. Island 0 is the runway island. */
+/* Seven islands: x, z, radius, peak height. Island 0 is the runway island:
+   a low hill (peak 30), not a mountain — the natural first turn off the
+   runway crosses its slopes while the plane is still climbing out, so a
+   tall peak there killed fresh launches. The big peaks stay on the
+   outer islands (88 / 70 / 95). */
 var ARCHIPELAGO_ISLANDS = [
-  { x: 0, z: 0, r: 230, peak: 58 },
+  { x: 0, z: 0, r: 230, peak: 30 },
   { x: 330, z: -190, r: 150, peak: 88 },
   { x: -320, z: -160, r: 140, peak: 70 },
   { x: 300, z: 260, r: 170, peak: 64 },
