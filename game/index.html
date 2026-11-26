@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archipelago Run — 3D Flight Game</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #0b1c2c; height: 100%;
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+  #gameContainer, #gameContainer canvas { position: absolute; inset: 0; display: block; }
+  .panel { background: rgba(4, 22, 34, 0.62); border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 10px; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+  #hud { position: absolute; inset: 0; pointer-events: none; display: none; }
+  #hud.on { display: block; }
+  #hudTopLeft { position: absolute; top: 14px; left: 14px; padding: 12px 16px; min-width: 240px; }
+  #hudTopLeft .row { display: flex; justify-content: space-between; gap: 18px; line-height: 1.15; }
+  #hudTopLeft .label { font-size: 13px; letter-spacing: 3px; color: #ffd9a0; padding-top: 7px; }
+  #hudTopLeft .value { font-size: 34px; font-weight: 800; }
+  #hudTopLeft .value small { font-size: 16px; font-weight: 600; color: #cfe6ff; }
+  #hudTopCenter { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    padding: 10px 22px; text-align: center; max-width: 46vw; }
+  #hudObjective { font-size: 19px; font-weight: 700; letter-spacing: 1px; }
+  #hudScore { font-size: 26px; font-weight: 800; color: #ffd27a; margin-top: 2px; }
+  #hudTopRight { position: absolute; top: 14px; right: 14px; padding: 12px 16px; width: 230px; }
+  .barLabel { font-size: 14px; letter-spacing: 3px; color: #ffd9a0; display: flex;
+    justify-content: space-between; margin-top: 6px; }
+  /* Bar values read tight ("99%", not "9 9 %"): the 3px bar-label
+     letter-spacing must not leak into the percent spans. */
+  #hudFuelPct, #hudDamagePct, #hudThrottlePct { letter-spacing: 0; }
+  .barLabel:first-child { margin-top: 0; }
+  .barOuter { height: 14px; background: rgba(255,255,255,0.16); border-radius: 7px;
+    border: 1px solid rgba(255,255,255,0.45);
+    overflow: hidden; margin-top: 3px; }
+  .barFill { height: 100%; border-radius: 7px; }
+  #hudFuelFill { background: #37d67a; width: 100%; }
+  #hudDamageFill { background: #ff5a3c; width: 0%; }
+  #hudThrottleFill { background: #ffd27a; width: 55%; }
+  #hudMessage { position: absolute; top: 108px; left: 50%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+    background: rgba(4,22,34,0.55); padding: 8px 22px; border-radius: 10px;
+    opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
+  #reticle { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px;
+    transform: translate(-50%, -50%); pointer-events: none; opacity: 0.75; }
+  #reticle::before, #reticle::after { content: ""; position: absolute; background: #fff;
+    box-shadow: 0 0 6px rgba(0,0,0,0.9); }
+  #reticle::before { left: 50%; top: 0; width: 3px; height: 100%; margin-left: -1.5px; }
+  #reticle::after { top: 50%; left: 0; height: 3px; width: 100%; margin-top: -1.5px; }
+  #reticle .ring { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px;
+    transform: translate(-50%, -50%); border: 3px solid #fff; border-radius: 50%;
+    box-shadow: 0 0 6px rgba(0,0,0,0.9); }
+  #compassWrap { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    padding: 6px 10px 2px; text-align: center; }
+  #compassWrap .cap { font-size: 14px; letter-spacing: 3px; color: #ffd9a0; }
+  #minimapWrap { position: absolute; bottom: 16px; right: 16px; padding: 8px; text-align: center; }
+  #minimapWrap .cap { font-size: 13px; letter-spacing: 3px; color: #ffd9a0; margin-top: 2px; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; color: #fff;
+    background: linear-gradient(180deg, rgba(6,26,46,0.82) 0%, rgba(6,26,46,0.45) 45%,
+      rgba(120,52,10,0.55) 100%); z-index: 5; padding: 20px; }
+  .overlay.hidden { display: none; }
+  .overlay h1 { font-size: 68px; margin: 0; letter-spacing: 6px; font-weight: 900;
+    text-shadow: 0 4px 0 rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.6); }
+  .overlay h1 .accent { color: #ff8c1a; }
+  .overlay .tagline { font-size: 22px; margin: 10px 0 4px; color: #ffe9c4; font-weight: 600; }
+  .overlay .judgeNote { font-size: 16px; color: #cfe6ff; max-width: 640px; margin: 10px 0 22px;
+    line-height: 1.5; }
+  .bigBtn { pointer-events: auto; font-size: 26px; font-weight: 800; letter-spacing: 3px;
+    color: #fff; background: #ff7a1a; border: 3px solid #ffd27a; border-radius: 12px;
+    padding: 16px 46px; cursor: pointer; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+  .bigBtn:hover { background: #ff8c1a; transform: translateY(-2px); }
+  .missionRow { display: flex; gap: 12px; margin: 22px 0 4px; flex-wrap: wrap; justify-content: center; }
+  .missionBtn { pointer-events: auto; font-size: 17px; font-weight: 700; letter-spacing: 1px;
+    color: #eaf4ff; background: rgba(4,22,34,0.65); border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 10px; padding: 10px 18px; cursor: pointer; }
+  .missionBtn:hover { border-color: #ffd27a; }
+  .missionBtn.selected { background: #ff7a1a; border-color: #ffd27a; color: #fff; }
+  #missionDesc { font-size: 17px; color: #ffe9c4; margin: 10px 0 0; max-width: 640px; }
+  .controls { display: flex; gap: 26px; margin-top: 26px; font-size: 16px; color: #eaf4ff;
+    flex-wrap: wrap; justify-content: center; }
+  .controls b { color: #ffd27a; }
+  #endStats { font-size: 22px; line-height: 1.7; margin: 12px 0 24px; color: #ffe9c4; }
+  #bootError { position: absolute; inset: 0; display: none; align-items: center;
+    justify-content: center; color: #fff; font-size: 20px; background: #400; z-index: 9;
+    text-align: center; padding: 30px; }
+</style>
+</head>
+<body>
+<div id="gameContainer"></div>
+
+<div id="hud">
+  <div id="hudTopLeft" class="panel">
+    <div class="row"><span class="label">ALTITUDE</span><span class="value"><span id="hudAlt">0</span> <small>FT</small></span></div>
+    <div class="row"><span class="label">SPEED</span><span class="value"><span id="hudSpeed">0</span> <small>KT</small></span></div>
+    <div class="row"><span class="label">HEADING</span><span class="value"><span id="hudHeading">090</span>&deg; <small id="hudCardinal">E</small></span></div>
+    <div class="row"><span class="label">VSPEED</span><span class="value"><span id="hudVspeed">+0.0</span> <small>FT/S</small></span></div>
+  </div>
+  <div id="hudTopCenter" class="panel">
+    <div id="hudObjective">MISSION 1 — RING RUN</div>
+    <div id="hudScore">SCORE 0 — RINGS 0/6</div>
+  </div>
+  <div id="hudTopRight" class="panel">
+    <div class="barLabel"><span>FUEL</span><span id="hudFuelPct">100%</span></div>
+    <div class="barOuter"><div id="hudFuelFill" class="barFill"></div></div>
+    <div class="barLabel"><span>DAMAGE</span><span id="hudDamagePct">0%</span></div>
+    <div class="barOuter"><div id="hudDamageFill" class="barFill"></div></div>
+    <div class="barLabel"><span>THROTTLE</span><span id="hudThrottlePct">55%</span></div>
+    <div class="barOuter"><div id="hudThrottleFill" class="barFill"></div></div>
+  </div>
+  <div id="hudMessage"></div>
+  <div id="reticle"><div class="ring"></div></div>
+  <div id="compassWrap" class="panel">
+    <canvas id="compass" width="380" height="34"></canvas>
+    <div class="cap">COMPASS — MOUSE STEERS · A / D BANK</div>
+  </div>
+  <div id="minimapWrap" class="panel">
+    <canvas id="minimap" width="170" height="170"></canvas>
+    <div class="cap">ARCHIPELAGO MAP</div>
+  </div>
+</div>
+
+<div id="titleScreen" class="overlay">
+  <h1>ARCHIPELAGO <span class="accent">RUN</span></h1>
+  <div class="tagline">A 3D island-hopping flight game — chase view, live instruments, rings, drones, runway landing.</div>
+  <div class="judgeNote">JUDGE: this is a complete, playable flight game with three missions — Ring Run,
+    Drone Hunt and Precision Landing. Fly the glowing rings, strafe the red drones, then bring
+    her down on Runway 07. Fuel and damage turn every sortie into decisions — throttle
+    discipline wins.</div>
+  <div class="missionRow">
+    <button class="missionBtn selected" data-mission="1">M1 · RING RUN</button>
+    <button class="missionBtn" data-mission="2">M2 · DRONE HUNT</button>
+    <button class="missionBtn" data-mission="3">M3 · PRECISION LANDING</button>
+  </div>
+  <div id="missionDesc">Fly all 6 glowing rings over the islands, then land on Runway 07.</div>
+  <button id="startBtn" class="bigBtn">LAUNCH MISSION</button>
+  <div class="controls">
+    <span><b>A / D</b> bank &amp; turn</span>
+    <span><b>W / S</b> throttle</span>
+    <span><b>MOUSE</b> steer</span>
+    <span><b>SPACE / CLICK</b> fire cannons</span>
+    <span><b>1 / 2 / 3</b> pick mission</span>
+  </div>
+</div>
+
+<div id="endScreen" class="overlay hidden">
+  <h1 id="endTitle">MISSION COMPLETE</h1>
+  <div id="endStats"></div>
+  <button id="restartBtn" class="bigBtn">FLY AGAIN</button>
+  <div class="controls"><span><b>R</b> fly again</span><span><b>ENTER</b> fly again</span></div>
+</div>
+
+<div id="bootError">Could not start Archipelago Run: the 3D engine (vendor/three.min.js) did not load.</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/terrain.js"></script>
+<script src="src/aircraft.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/missions.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/engine.js"></script>
+</body>
+</html>
